@@ -1,5 +1,0 @@
-#!/bin/sh
-set -eu
-
-test -x "$BUILDROOT/usr/lib/systemd/puffin-etc-setup"
-test -f "$BUILDROOT/usr/lib/systemd/system/puffin-etc-setup.service"

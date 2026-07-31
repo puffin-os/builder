@@ -21,6 +21,12 @@ each flavour's `DESIGN.md` for its decisions.
 The image builder itself runs in a privileged, project-owned Podman container,
 so immutable hosts do not need mkosi or pacman installed.
 
+Fetch the component repositories after cloning the builder:
+
+```sh
+task sync
+```
+
 ## Use
 
 ```sh
@@ -89,16 +95,16 @@ OVMF_CODE=/path/to/OVMF_CODE.fd OVMF_VARS=/path/to/OVMF_VARS.fd task run
 
 ## Components
 
-The canonical image definitions live in separate `puffin-os` repositories.
-This builder commits reviewed snapshots of them so a checkout is immediately
-buildable. After changing a component repository, refresh the snapshots with:
+The canonical image definitions live in separate `puffin-os` repositories and
+are not tracked by the builder repository. Fetch or refresh the local component
+directories with:
 
 ```sh
 task sync
 ```
 
-Commit the resulting component-directory changes together with
-`vendir.lock.yml`.
+Commit only the resulting `vendir.lock.yml` change when advancing component
+revisions.
 
 The development image has root autologin on the serial console. This is a
 development profile only; the normal base keeps root locked.

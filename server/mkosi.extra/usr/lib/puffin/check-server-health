@@ -1,9 +1,0 @@
-#!/bin/sh
-set -eu
-
-systemctl -q is-active sshd.service
-test ! -e /var/lib/puffin/provision/username
-
-if test "$(cloud-id 2>/dev/null || true)" = nocloud; then
-    cloud-init status --wait >/dev/null
-fi

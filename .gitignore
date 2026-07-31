@@ -2,4 +2,8 @@
 /state/
 /.cache/
 /.local/
-
+/base/
+/shared/
+/server/
+/desktop/
+/workstation/

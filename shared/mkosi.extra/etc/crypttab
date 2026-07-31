@@ -1,1 +1,0 @@
-puffin-var LABEL=puffin_var_luks none luks,nofail,tpm2-device=auto

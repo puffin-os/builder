@@ -1,5 +1,0 @@
-#!/bin/sh
-set -eu
-
-systemctl -q is-active graphical.target gdm.service
-test ! -e /var/lib/puffin/provision/username

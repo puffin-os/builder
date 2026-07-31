@@ -1,9 +1,0 @@
-#!/bin/sh
-set -eu
-
-install -d /run/puffin-etc
-mount LABEL=puffin_etc /run/puffin-etc
-install -d /run/puffin-etc/upper /run/puffin-etc/work
-mount -t overlay overlay \
-    -o lowerdir=/sysroot/usr/etc,upperdir=/run/puffin-etc/upper,workdir=/run/puffin-etc/work \
-    /sysroot/etc

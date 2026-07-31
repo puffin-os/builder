@@ -13,6 +13,7 @@ includes:
   base:
     taskfile: ./base/Taskfile.yml
     dir: ./base
+    optional: true
     vars: &component_vars
       ROOT: '{{.ROOT_DIR}}'
       BUILDER: '{{.BUILDER}}'
@@ -21,18 +22,22 @@ includes:
   shared:
     taskfile: ./shared/Taskfile.yml
     dir: ./shared
+    optional: true
     vars: *component_vars
   server:
     taskfile: ./server/Taskfile.yml
     dir: ./server
+    optional: true
     vars: *component_vars
   desktop:
     taskfile: ./desktop/Taskfile.yml
     dir: ./desktop
+    optional: true
     vars: *component_vars
   workstation:
     taskfile: ./workstation/Taskfile.yml
     dir: ./workstation
+    optional: true
     vars: *component_vars
 
 tasks:
