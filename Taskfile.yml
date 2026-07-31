@@ -41,6 +41,9 @@ includes:
     vars: *component_vars
 
 tasks:
+  default:
+    cmds:
+      - task -a
   sync:
     desc: Update component snapshots and vendir.lock.yml
     cmds:
