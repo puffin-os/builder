@@ -1,0 +1,100 @@
+version: '3'
+
+vars:
+  BUILDER: localhost/puffin-builder:26
+  CONTAINER: podman run --rm --privileged -v '{{.ROOT_DIR}}:/work:Z'
+  KEYS: >-
+    --secure-boot-key=/work/.local/mkosi.key
+    --secure-boot-certificate=/work/.local/mkosi.crt
+    --verity-key=/work/.local/mkosi.key
+    --verity-certificate=/work/.local/mkosi.crt
+
+includes:
+  base:
+    taskfile: ./base/Taskfile.yml
+    dir: ./base
+    vars: &component_vars
+      ROOT: '{{.ROOT_DIR}}'
+      BUILDER: '{{.BUILDER}}'
+      CONTAINER: '{{.CONTAINER}}'
+      KEYS: '{{.KEYS}}'
+  shared:
+    taskfile: ./shared/Taskfile.yml
+    dir: ./shared
+    vars: *component_vars
+  server:
+    taskfile: ./server/Taskfile.yml
+    dir: ./server
+    vars: *component_vars
+  desktop:
+    taskfile: ./desktop/Taskfile.yml
+    dir: ./desktop
+    vars: *component_vars
+  workstation:
+    taskfile: ./workstation/Taskfile.yml
+    dir: ./workstation
+    vars: *component_vars
+
+tasks:
+  sync:
+    desc: Update component snapshots and vendir.lock.yml
+    cmds:
+      - vendir sync
+
+  builder:
+    desc: Build the image-builder container
+    run: once
+    cmds:
+      - podman build -t '{{.BUILDER}}' -f dev/Containerfile .
+
+  keys:
+    desc: Create disposable development signing keys
+    run: once
+    cmds:
+      - task: builder
+      - mkdir -p .local
+      - >-
+        test -f .local/mkosi.key -a -f .local/mkosi.crt ||
+        podman run --rm -v '{{.ROOT_DIR}}/.local:/keys:Z' -w /keys '{{.BUILDER}}'
+        mkosi genkey --genkey-common-name='Puffin development'
+
+  summary:
+    desc: Show the base image build summary
+    cmds:
+      - task: base:summary
+
+  build:
+    desc: Build the base image
+    cmds:
+      - task: base:build
+
+  run:
+    desc: Boot the base image
+    cmds:
+      - task: base:run
+
+  check:
+    desc: Validate and boot-check the base image
+    cmds:
+      - task: base:check
+
+  reset:
+    desc: Remove persistent base VM state
+    cmds:
+      - task: base:reset
+
+  publish-update:
+    desc: Publish signed update artifacts
+    requires:
+      vars: [FLAVOR, VERSION, DESTINATION, GPG_KEY]
+    cmds:
+      - >-
+        dev/publish-update.sh
+        'out/puffin-{{.FLAVOR}}-x86-64.raw'
+        'out/puffin-{{.FLAVOR}}-x86-64.efi'
+        'puffin-{{.FLAVOR}}' '{{.VERSION}}' '{{.DESTINATION}}' '{{.GPG_KEY}}'
+
+  clean:
+    desc: Remove all generated build and local VM state
+    cmds:
+      - rm -rf -- out .cache state .local

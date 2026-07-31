@@ -1,0 +1,33 @@
+apiVersion: vendir.k14s.io/v1alpha1
+kind: Config
+directories:
+  - path: base
+    contents:
+      - path: .
+        git:
+          url: https://github.com/puffin-os/base
+          ref: main
+  - path: shared
+    contents:
+      - path: .
+        git:
+          url: https://github.com/puffin-os/shared
+          ref: main
+  - path: server
+    contents:
+      - path: .
+        git:
+          url: https://github.com/puffin-os/server
+          ref: main
+  - path: desktop
+    contents:
+      - path: .
+        git:
+          url: https://github.com/puffin-os/desktop
+          ref: main
+  - path: workstation
+    contents:
+      - path: .
+        git:
+          url: https://github.com/puffin-os/workstation
+          ref: main

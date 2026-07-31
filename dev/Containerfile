@@ -1,0 +1,21 @@
+FROM registry.fedoraproject.org/fedora@sha256:f8f22a4890139a9800df26a9b7807767e6a33eb6762be6b11e5e49f14d3425b7
+
+RUN dnf install -y \
+        archlinux-keyring \
+        cryptsetup \
+        dosfstools \
+        e2fsprogs \
+        erofs-utils \
+        flatpak \
+        mkosi \
+        openssl \
+        pacman \
+        qemu-img \
+        sbsigntools \
+        systemd-boot-unsigned \
+        systemd-container \
+        systemd-ukify \
+        util-linux \
+    && dnf clean all
+
+WORKDIR /work/base
