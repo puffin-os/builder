@@ -7,27 +7,37 @@ directories:
         git:
           url: https://github.com/puffin-os/base
           ref: main
+        excludePaths:
+          - .git/**/*
   - path: shared
     contents:
       - path: .
         git:
           url: https://github.com/puffin-os/shared
           ref: main
+        excludePaths:
+          - .git/**/*
   - path: server
     contents:
       - path: .
         git:
           url: https://github.com/puffin-os/server
           ref: main
+        excludePaths:
+          - .git/**/*
   - path: desktop
     contents:
       - path: .
         git:
           url: https://github.com/puffin-os/desktop
           ref: main
+        excludePaths:
+          - .git/**/*
   - path: workstation
     contents:
       - path: .
         git:
           url: https://github.com/puffin-os/workstation
           ref: main
+        excludePaths:
+          - .git/**/*
