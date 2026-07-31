@@ -1,0 +1,11 @@
+[Unit]
+Description=Verify the Puffin immutable filesystem contract
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/puffin/check-boot
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target

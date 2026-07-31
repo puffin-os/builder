@@ -1,0 +1,18 @@
+[Transfer]
+ProtectVersion=%A
+Verify=yes
+
+[Source]
+Type=url-file
+Path=https://updates.puffin.invalid/stable/%M/%a
+MatchPattern=puffin-@v.efi
+
+[Target]
+Type=regular-file
+Path=/EFI/Linux
+PathRelativeTo=boot
+MatchPattern=puffin-@v+@l-@d.efi puffin-@v+@l.efi puffin-@v.efi
+Mode=0644
+TriesLeft=3
+TriesDone=0
+InstancesMax=2

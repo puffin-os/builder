@@ -1,0 +1,3 @@
+LABEL=puffin_var /var ext4 defaults,x-systemd.growfs 0 2
+/var/home /home none bind,x-systemd.requires-mounts-for=/var/home 0 0
+/var/roothome /root none bind,x-systemd.requires-mounts-for=/var/roothome 0 0

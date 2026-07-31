@@ -1,0 +1,15 @@
+[Unit]
+Description=Mount the persistent Puffin /etc overlay
+DefaultDependencies=no
+Requires=sysroot.mount dev-disk-by\x2dlabel-puffin_etc.device
+After=sysroot.mount dev-disk-by\x2dlabel-puffin_etc.device
+Before=initrd-root-fs.target
+ConditionPathIsDirectory=/sysroot/usr/etc
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/systemd/puffin-etc-setup
+
+[Install]
+WantedBy=initrd-root-fs.target

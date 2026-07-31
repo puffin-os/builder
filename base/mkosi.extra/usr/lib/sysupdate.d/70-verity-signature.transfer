@@ -1,0 +1,17 @@
+[Transfer]
+ProtectVersion=%A
+Verify=yes
+
+[Source]
+Type=url-file
+Path=https://updates.puffin.invalid/stable/%M/%a
+MatchPattern=puffin-@v.verity-sig.raw
+
+[Target]
+Type=partition
+Path=auto
+MatchPattern=puffin_@v_verity_sig
+MatchPartitionType=root-verity-sig
+PartitionFlags=0
+ReadOnly=yes
+InstancesMax=2

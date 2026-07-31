@@ -1,0 +1,36 @@
+version: '3'
+
+tasks:
+  summary:
+    cmds:
+      - task: ':keys'
+      - mkdir -p '{{.ROOT}}/out' '{{.ROOT}}/.cache/mkosi' '{{.ROOT}}/.cache/packages'
+      - '{{.CONTAINER}} -w /work/base {{.BUILDER}} mkosi --profile=dev {{.KEYS}} summary'
+
+  build:
+    cmds:
+      - task: ':keys'
+      - mkdir -p '{{.ROOT}}/out' '{{.ROOT}}/.cache/mkosi' '{{.ROOT}}/.cache/packages'
+      - '{{.CONTAINER}} -w /work/base {{.BUILDER}} mkosi --profile=dev {{.KEYS}} -f build'
+
+  ensure-built:
+    internal: true
+    status:
+      - test -f '{{.ROOT}}/out/puffin-base-x86-64.raw'
+    cmds:
+      - task: build
+
+  run:
+    cmds:
+      - task: ensure-built
+      - '{{.ROOT}}/dev/qemu.sh'
+
+  check:
+    cmds:
+      - task: ensure-built
+      - '{{.CONTAINER}} -w /work/base {{.BUILDER}} /work/dev/check-image.sh /work/out/puffin-base-x86-64.raw'
+      - '{{.ROOT}}/dev/qemu.sh --check'
+
+  reset:
+    cmds:
+      - rm -f -- '{{.ROOT}}/state/puffin-base.qcow2' '{{.ROOT}}/state/OVMF_VARS-base.fd'

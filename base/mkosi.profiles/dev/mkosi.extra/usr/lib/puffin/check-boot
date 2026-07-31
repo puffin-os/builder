@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+/usr/lib/puffin/check-boot-health
+
+if test -e /var/lib/puffin/boot-check; then
+    test -e /etc/puffin-boot-check
+    echo "PUFFIN_BOOT_OK persistent" >/dev/ttyS0
+else
+    touch /var/lib/puffin/boot-check
+    touch /etc/puffin-boot-check
+    sync
+    echo "PUFFIN_BOOT_OK initial" >/dev/ttyS0
+fi

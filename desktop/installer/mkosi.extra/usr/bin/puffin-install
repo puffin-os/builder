@@ -1,0 +1,546 @@
+#!/usr/bin/python
+import json
+import os
+import re
+import subprocess
+import sys
+import threading
+from pathlib import Path
+
+PAYLOAD = Path("/usr/lib/puffin/puffin-desktop-x86-64.raw.zst")
+FLATPAKS = Path("/usr/lib/puffin/puffin-desktop-flatpaks-x86-64.tar.zst")
+TARGET = Path("/run/puffin-target-var")
+MAPPER = "puffin-installer-var"
+MINIMUM_DISK = 33_822_867_456
+
+
+def valid_hostname(value):
+    return bool(
+        value
+        and len(value) <= 64
+        and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]*", value)
+        and ".." not in value
+        and not value.endswith(".")
+    )
+
+
+def valid_user(value):
+    return bool(
+        value
+        and value != "root"
+        and re.fullmatch(r"[a-z_][a-z0-9_-]*", value)
+    )
+
+
+def valid_real_name(value):
+    return bool(value and ":" not in value and "\n" not in value)
+
+
+def valid_layout(value):
+    return bool(value and re.fullmatch(r"[A-Za-z0-9_+-]+", value))
+
+
+def run(args, **kwargs):
+    return subprocess.run(args, check=True, text=True, **kwargs)
+
+
+def source_disk():
+    partition = run(
+        ["findmnt", "-n", "-o", "SOURCE", "/var"], capture_output=True
+    ).stdout.strip()
+    parent = run(
+        ["lsblk", "-ndo", "PKNAME", partition], capture_output=True
+    ).stdout.strip()
+    return f"/dev/{parent}"
+
+
+def available_disks():
+    source = source_disk()
+    data = json.loads(
+        run(
+            ["lsblk", "-J", "-b", "-d", "-o", "PATH,SIZE,MODEL,TYPE,RO"],
+            capture_output=True,
+        ).stdout
+    )
+    result = []
+    for disk in data["blockdevices"]:
+        if (
+            disk["type"] == "disk"
+            and not disk["ro"]
+            and disk["path"] != source
+            and int(disk["size"]) >= MINIMUM_DISK
+        ):
+            model = (disk.get("model") or "Unknown disk").strip()
+            size = int(disk["size"]) // (1024**3)
+            result.append((disk["path"], f"{model} — {size} GiB ({disk['path']})"))
+    return result
+
+
+def choices(command):
+    return [
+        line
+        for line in run(command, capture_output=True).stdout.splitlines()
+        if line
+    ]
+
+
+def partition_from_lsblk(output, label):
+    for line in output.splitlines():
+        fields = line.split(maxsplit=1)
+        if len(fields) == 2 and fields[1] == label:
+            return fields[0]
+    return None
+
+
+def partition_by_label(disk, label):
+    output = run(
+        ["lsblk", "-nrpo", "PATH,PARTLABEL", disk],
+        capture_output=True,
+    ).stdout
+    if partition := partition_from_lsblk(output, label):
+        return partition
+    raise RuntimeError(f"partition {label} not found")
+
+
+def mounted(disk):
+    output = run(
+        ["lsblk", "-nrpo", "MOUNTPOINT", disk], capture_output=True
+    ).stdout
+    return any(line.startswith("/") for line in output.splitlines())
+
+
+class Installer:
+    def __init__(self, values, progress):
+        self.values = values
+        self.progress = progress
+        self.key = Path("/run/puffin-installer.key")
+        self.opened = False
+        self.mounted = False
+
+    def step(self, message, fraction):
+        self.progress(message, fraction)
+
+    def cleanup(self):
+        if self.mounted:
+            subprocess.run(["umount", str(TARGET)], check=False)
+            self.mounted = False
+        if self.opened:
+            subprocess.run(["cryptsetup", "close", MAPPER], check=False)
+            self.opened = False
+        self.key.unlink(missing_ok=True)
+
+    def install(self):
+        disk = self.values["disk"]
+        if disk not in dict(available_disks()) or mounted(disk):
+            raise RuntimeError("The selected disk is no longer safe to erase")
+        if not PAYLOAD.is_file() or not FLATPAKS.is_file():
+            raise RuntimeError("The installer payload is incomplete")
+
+        try:
+            self.step("Writing the Puffin desktop image…", 0.1)
+            with PAYLOAD.open("rb") as source:
+                zstd = subprocess.Popen(["zstd", "-dc"], stdin=source, stdout=subprocess.PIPE)
+                dd = subprocess.run(
+                    [
+                        "dd",
+                        f"of={disk}",
+                        "bs=16M",
+                        "iflag=fullblock",
+                        "conv=fsync",
+                        "status=none",
+                    ],
+                    stdin=zstd.stdout,
+                    check=True,
+                )
+                del dd
+                zstd.stdout.close()
+                if zstd.wait() != 0:
+                    raise RuntimeError("Failed to decompress the desktop image")
+
+            run(["blockdev", "--rereadpt", disk])
+            run(["udevadm", "settle"])
+            run(["systemd-repart", "--dry-run=no", "--empty=allow", disk])
+            run(["udevadm", "settle"])
+
+            self.step("Encrypting persistent storage…", 0.35)
+            partition = partition_by_label(disk, "puffin_var")
+            run(["wipefs", "-a", partition])
+            descriptor = os.open(
+                self.key, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600
+            )
+            os.write(descriptor, self.values["luks_password"].encode())
+            os.close(descriptor)
+            run(
+                [
+                    "cryptsetup",
+                    "luksFormat",
+                    "--batch-mode",
+                    "--type=luks2",
+                    "--label=puffin_var_luks",
+                    f"--key-file={self.key}",
+                    partition,
+                ]
+            )
+            run(
+                [
+                    "cryptsetup",
+                    "open",
+                    f"--key-file={self.key}",
+                    partition,
+                    MAPPER,
+                ]
+            )
+            self.opened = True
+
+            tpm_warning = None
+            if Path("/dev/tpmrm0").exists():
+                enrolled = subprocess.run(
+                    [
+                        "systemd-cryptenroll",
+                        partition,
+                        f"--unlock-key-file={self.key}",
+                        "--tpm2-device=auto",
+                        "--tpm2-pcrs=7",
+                    ],
+                    check=False,
+                )
+                if enrolled.returncode:
+                    tpm_warning = "TPM2 enrollment failed; passphrase unlock remains available."
+            else:
+                tpm_warning = "No TPM2 was found; passphrase unlock will be required."
+
+            self.step("Creating the administrator account…", 0.55)
+            filesystem = f"/dev/mapper/{MAPPER}"
+            run(["mkfs.ext4", "-F", "-L", "puffin_var", filesystem])
+            TARGET.mkdir(mode=0o755, parents=True, exist_ok=True)
+            run(["mount", filesystem, str(TARGET)])
+            self.mounted = True
+
+            for relative in (
+                "home",
+                "roothome",
+                "lib/puffin/esp",
+                "lib/puffin",
+                "log/journal",
+            ):
+                (TARGET / relative).mkdir(mode=0o755, parents=True, exist_ok=True)
+            provision = TARGET / "lib/puffin/provision"
+            provision.mkdir(mode=0o700)
+            (provision / "username").write_text(self.values["username"] + "\n")
+            (provision / "real-name").write_text(self.values["real_name"] + "\n")
+            (provision / "hostname").write_text(self.values["hostname"] + "\n")
+            (provision / "timezone").write_text(self.values["timezone"] + "\n")
+            (provision / "xkb-layout").write_text(self.values["layout"] + "\n")
+            hashed = run(
+                ["openssl", "passwd", "-6", "-stdin"],
+                input=self.values["password"] + "\n",
+                capture_output=True,
+            ).stdout.strip()
+            (provision / "password-hash").write_text(hashed + "\n")
+            for path in provision.iterdir():
+                path.chmod(0o600)
+
+            self.step("Installing the default GNOME applications…", 0.75)
+            flatpak = TARGET / "lib/flatpak"
+            flatpak.mkdir(mode=0o755, parents=True, exist_ok=True)
+            run(["tar", "--zstd", "-xf", str(FLATPAKS), "-C", str(flatpak)])
+            flatpak.chmod(0o755)
+
+            self.step("Finishing installation…", 0.95)
+            run(["sync"])
+            run(["umount", str(TARGET)])
+            self.mounted = False
+            run(["cryptsetup", "close", MAPPER])
+            self.opened = False
+            self.key.unlink(missing_ok=True)
+            return tpm_warning
+        finally:
+            self.cleanup()
+
+
+def self_test():
+    assert valid_hostname("puffin-laptop")
+    assert not valid_hostname("../bad")
+    assert valid_user("kostas")
+    assert not valid_user("root")
+    assert valid_real_name("Kostas Example")
+    assert not valid_real_name("bad:name")
+    assert valid_layout("gb")
+    assert not valid_layout("../../gb")
+    layout = "/dev/vdb\n/dev/vdb1 puffin_esp\n/dev/vdb8 puffin_var\n"
+    assert partition_from_lsblk(layout, "puffin_var") == "/dev/vdb8"
+    assert partition_from_lsblk(layout, "missing") is None
+    assert MINIMUM_DISK == 33_822_867_456
+    print("Desktop installer input checks passed")
+
+
+if __name__ == "__main__" and sys.argv[1:] == ["--self-test"]:
+    self_test()
+    raise SystemExit
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Adw, GLib, Gtk
+
+
+class App(Adw.Application):
+    def __init__(self):
+        super().__init__(application_id="dev.puffin.Installer")
+        self.connect("activate", self.activate)
+        self.pages = []
+        self.index = 0
+        self.installing = False
+
+    def activate(self, _app):
+        self.window = Adw.ApplicationWindow(application=self)
+        self.window.set_title("Install Puffin")
+        self.window.set_default_size(760, 600)
+
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        header = Adw.HeaderBar()
+        root.append(header)
+        self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
+        self.stack.set_vexpand(True)
+        root.append(self.stack)
+
+        nav = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        nav.set_margin_start(24)
+        nav.set_margin_end(24)
+        nav.set_margin_top(12)
+        nav.set_margin_bottom(24)
+        self.error = Gtk.Label(xalign=0)
+        self.error.add_css_class("error")
+        self.error.set_hexpand(True)
+        nav.append(self.error)
+        self.back = Gtk.Button(label="Back")
+        self.back.connect("clicked", self.go_back)
+        nav.append(self.back)
+        self.next = Gtk.Button(label="Next")
+        self.next.add_css_class("suggested-action")
+        self.next.connect("clicked", self.go_next)
+        nav.append(self.next)
+        root.append(nav)
+
+        self.build_pages()
+        self.window.set_content(root)
+        self.show_page(0)
+        self.window.present()
+        print("PUFFIN_INSTALLER_UI_OK", flush=True)
+        with open("/dev/kmsg", "w", encoding="utf-8") as marker:
+            marker.write("puffin-install: PUFFIN_INSTALLER_UI_OK\n")
+
+    def page(self, title, body):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+        box.set_margin_start(64)
+        box.set_margin_end(64)
+        box.set_margin_top(48)
+        box.set_margin_bottom(32)
+        label = Gtk.Label(label=title, xalign=0)
+        label.add_css_class("title-1")
+        box.append(label)
+        description = Gtk.Label(label=body, xalign=0, wrap=True)
+        description.add_css_class("dim-label")
+        box.append(description)
+        name = f"page-{len(self.pages)}"
+        self.stack.add_named(box, name)
+        self.pages.append(box)
+        return box
+
+    def entry(self, page, label, password=False):
+        caption = Gtk.Label(label=label, xalign=0)
+        page.append(caption)
+        widget = Gtk.PasswordEntry() if password else Gtk.Entry()
+        page.append(widget)
+        return widget
+
+    def dropdown(self, page, label, values):
+        page.append(Gtk.Label(label=label, xalign=0))
+        model = Gtk.StringList.new(values)
+        widget = Gtk.DropDown(model=model)
+        widget.set_hexpand(True)
+        page.append(widget)
+        return widget
+
+    def build_pages(self):
+        self.page(
+            "Welcome to Puffin",
+            "This guided installer will erase one complete disk and install the GNOME desktop.",
+        )
+
+        disk_page = self.page(
+            "Choose an installation disk",
+            "Only unmounted whole disks of at least 32 GiB are shown.",
+        )
+        self.disks = available_disks()
+        self.disk = self.dropdown(
+            disk_page, "Target disk", [label for _path, label in self.disks]
+        )
+
+        region = self.page(
+            "Region and input",
+            "The installer uses English. These settings apply to the installed desktop.",
+        )
+        self.timezones = choices(["timedatectl", "--no-pager", "list-timezones"])
+        self.layouts = choices(["localectl", "--no-pager", "list-x11-keymap-layouts"])
+        self.timezone = self.dropdown(region, "Timezone", self.timezones)
+        if "Europe/London" in self.timezones:
+            self.timezone.set_selected(self.timezones.index("Europe/London"))
+        self.layout = self.dropdown(region, "Keyboard layout", self.layouts)
+        if "gb" in self.layouts:
+            self.layout.set_selected(self.layouts.index("gb"))
+
+        identity = self.page(
+            "Create the administrator",
+            "This account can administer the machine through wheel and sudo.",
+        )
+        self.real_name = self.entry(identity, "Full name")
+        self.username = self.entry(identity, "Username")
+        self.hostname = self.entry(identity, "Computer name")
+        self.hostname.set_text("puffin")
+        self.password = self.entry(identity, "Account password", True)
+        self.password_confirm = self.entry(identity, "Confirm account password", True)
+
+        encryption = self.page(
+            "Encrypt persistent storage",
+            "A separate recovery passphrase is mandatory. TPM2 automatic unlock will be attempted.",
+        )
+        self.luks_password = self.entry(encryption, "LUKS2 recovery passphrase", True)
+        self.luks_confirm = self.entry(encryption, "Confirm recovery passphrase", True)
+
+        review = self.page(
+            "Ready to install",
+            "The selected disk will be erased. This cannot be undone.",
+        )
+        self.review = Gtk.Label(xalign=0, wrap=True)
+        review.append(self.review)
+        self.confirm = Gtk.CheckButton(
+            label="I understand that all data on the selected disk will be erased"
+        )
+        review.append(self.confirm)
+
+        progress = self.page("Installing Puffin", "Do not power off the computer.")
+        self.progress_label = Gtk.Label(xalign=0)
+        progress.append(self.progress_label)
+        self.progress = Gtk.ProgressBar(show_text=True)
+        progress.append(self.progress)
+
+        done = self.page("Installation complete", "Remove the installer medium, then reboot.")
+        self.done_message = Gtk.Label(xalign=0, wrap=True)
+        done.append(self.done_message)
+        reboot = Gtk.Button(label="Reboot")
+        reboot.add_css_class("suggested-action")
+        reboot.connect("clicked", lambda _button: run(["systemctl", "reboot"]))
+        done.append(reboot)
+
+    def selected(self, dropdown, values):
+        position = dropdown.get_selected()
+        return values[position] if position < len(values) else ""
+
+    def validate(self):
+        self.error.set_text("")
+        if self.index == 1 and not self.disks:
+            return "No safe installation disk is available"
+        if self.index == 2:
+            if not self.selected(self.timezone, self.timezones):
+                return "Choose a timezone"
+            if not valid_layout(self.selected(self.layout, self.layouts)):
+                return "Choose a keyboard layout"
+        if self.index == 3:
+            if not valid_real_name(self.real_name.get_text().strip()):
+                return "Enter your full name"
+            if not valid_user(self.username.get_text()):
+                return "Use a lowercase username beginning with a letter or underscore"
+            if not valid_hostname(self.hostname.get_text()):
+                return "Enter a valid computer name"
+            if len(self.password.get_text()) < 8:
+                return "The account password must contain at least 8 characters"
+            if self.password.get_text() != self.password_confirm.get_text():
+                return "The account passwords do not match"
+        if self.index == 4:
+            if len(self.luks_password.get_text()) < 8:
+                return "The recovery passphrase must contain at least 8 characters"
+            if self.luks_password.get_text() != self.luks_confirm.get_text():
+                return "The recovery passphrases do not match"
+        if self.index == 5 and not self.confirm.get_active():
+            return "Confirm that the selected disk may be erased"
+        return None
+
+    def values(self):
+        disk_index = self.disk.get_selected()
+        return {
+            "disk": self.disks[disk_index][0],
+            "timezone": self.selected(self.timezone, self.timezones),
+            "layout": self.selected(self.layout, self.layouts),
+            "real_name": self.real_name.get_text().strip(),
+            "username": self.username.get_text(),
+            "hostname": self.hostname.get_text(),
+            "password": self.password.get_text(),
+            "luks_password": self.luks_password.get_text(),
+        }
+
+    def show_page(self, index):
+        self.index = index
+        self.stack.set_visible_child_name(f"page-{index}")
+        self.back.set_visible(index not in (0, 6, 7))
+        self.next.set_visible(index < 6)
+        self.next.set_label("Erase and Install" if index == 5 else "Next")
+        self.error.set_text("")
+        if index == 5:
+            disk = self.disks[self.disk.get_selected()][1]
+            self.review.set_text(
+                f"Disk: {disk}\n"
+                f"Computer: {self.hostname.get_text()}\n"
+                f"Administrator: {self.real_name.get_text()} ({self.username.get_text()})\n"
+                f"Timezone: {self.selected(self.timezone, self.timezones)}\n"
+                f"Keyboard: {self.selected(self.layout, self.layouts)}\n\n"
+                "The disk will use immutable verified roots and encrypted persistent storage."
+            )
+
+    def go_back(self, _button):
+        self.show_page(self.index - 1)
+
+    def go_next(self, _button):
+        error = self.validate()
+        if error:
+            self.error.set_text(error)
+            return
+        if self.index == 5:
+            self.start_install()
+        else:
+            self.show_page(self.index + 1)
+
+    def update_progress(self, message, fraction):
+        GLib.idle_add(self.progress_label.set_text, message)
+        GLib.idle_add(self.progress.set_fraction, fraction)
+
+    def start_install(self):
+        self.show_page(6)
+        self.installing = True
+        self.window.set_deletable(False)
+        values = self.values()
+
+        def worker():
+            try:
+                warning = Installer(values, self.update_progress).install()
+                GLib.idle_add(self.finish_install, warning)
+            except Exception as exception:
+                GLib.idle_add(self.fail_install, str(exception))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def finish_install(self, warning):
+        self.done_message.set_text(warning or "TPM2 automatic unlock was enrolled successfully.")
+        self.window.set_deletable(True)
+        self.show_page(7)
+
+    def fail_install(self, message):
+        self.progress_label.set_text(f"Installation failed: {message}")
+        self.progress.add_css_class("error")
+        self.window.set_deletable(True)
+        self.back.set_visible(True)
+        self.back.set_label("Back to review")
+
+
+App().run(sys.argv)

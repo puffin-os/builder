@@ -1,0 +1,17 @@
+[Transfer]
+ProtectVersion=%A
+Verify=yes
+
+[Source]
+Type=url-file
+Path=https://updates.puffin.invalid/stable/%M/%a
+MatchPattern=puffin-@v.verity.raw
+
+[Target]
+Type=partition
+Path=auto
+MatchPattern=puffin_@v_verity
+MatchPartitionType=root-verity
+PartitionFlags=0
+ReadOnly=yes
+InstancesMax=2

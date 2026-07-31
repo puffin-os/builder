@@ -1,0 +1,7 @@
+NAME="Puffin"
+ID=puffin
+ID_LIKE=arch
+PRETTY_NAME="Puffin Base"
+ANSI_COLOR="38;2;76;145;209"
+IMAGE_ID=puffin-base
+IMAGE_VERSION=0.1.0

@@ -1,0 +1,13 @@
+[Unit]
+Description=Provision the initial Puffin administrator
+ConditionPathExists=/var/lib/puffin/provision/username
+RequiresMountsFor=/etc /var/lib/puffin/provision
+Before=NetworkManager.service accounts-daemon.service systemd-networkd.service
+Before=getty@tty1.service gdm.service sshd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/puffin/provision-user
+
+[Install]
+WantedBy=multi-user.target

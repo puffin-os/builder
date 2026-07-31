@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+
+test ! -e "$BUILDROOT/usr/etc"
+mv "$BUILDROOT/etc" "$BUILDROOT/usr/etc"
+install -d "$BUILDROOT/etc"

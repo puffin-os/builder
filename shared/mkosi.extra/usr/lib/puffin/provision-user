@@ -1,0 +1,101 @@
+#!/bin/sh
+set -eu
+
+dir=/var/lib/puffin/provision
+user=$(cat "$dir/username")
+case "$user" in
+    '' | *[!a-z_0-9-]* | [0-9-]* | root) exit 1 ;;
+esac
+
+findmnt -n -T /etc -o OPTIONS | grep -qw rw
+
+if test -f "$dir/hostname"; then
+    hostname=$(cat "$dir/hostname")
+    case "$hostname" in
+        '' | *[!a-zA-Z0-9.-]* | .* | *..* | *.) exit 1 ;;
+    esac
+    printf '%s\n' "$hostname" >/etc/hostname
+    hostnamectl hostname "$hostname"
+fi
+
+if test -f "$dir/timezone"; then
+    timezone=$(cat "$dir/timezone")
+    case "$timezone" in
+        '' | /* | *..*) exit 1 ;;
+    esac
+    test -f "/usr/share/zoneinfo/$timezone"
+    ln -snf "/usr/share/zoneinfo/$timezone" /etc/localtime
+fi
+
+if test -f "$dir/keymap"; then
+    keymap=$(cat "$dir/keymap")
+    case "$keymap" in
+        '' | *[!a-zA-Z0-9_+-]*) exit 1 ;;
+    esac
+    printf 'KEYMAP=%s\n' "$keymap" >/etc/vconsole.conf
+    loadkeys "$keymap"
+fi
+
+if test -f "$dir/network"; then
+    install -Dm0600 "$dir/network" /etc/systemd/network/20-puffin.network
+fi
+
+real_name=
+if test -f "$dir/real-name"; then
+    real_name=$(cat "$dir/real-name")
+    case "$real_name" in *:*) exit 1 ;; esac
+fi
+
+if entry=$(getent passwd "$user"); then
+    uid=$(printf '%s\n' "$entry" | cut -d: -f3)
+    home=$(printf '%s\n' "$entry" | cut -d: -f6)
+    test "$uid" -ge 1000
+    test "$home" = "/home/$user"
+else
+    useradd --create-home --user-group --shell=/bin/bash \
+        --comment="$real_name" "$user"
+fi
+
+groups=wheel
+if getent group docker >/dev/null; then
+    groups=$groups,docker
+fi
+usermod --append --groups="$groups" --comment="$real_name" "$user"
+
+password_hash=$(cat "$dir/password-hash")
+case "$password_hash" in
+    '$6$'*) ;;
+    *) exit 1 ;;
+esac
+printf '%s:%s\n' "$user" "$password_hash" | chpasswd --encrypted
+
+if test -x /usr/lib/accounts-daemon; then
+    install -d -m 0755 /var/lib/AccountsService/users
+    printf '[User]\nSystemAccount=false\n' \
+        >"/var/lib/AccountsService/users/$user"
+    chmod 0600 "/var/lib/AccountsService/users/$user"
+fi
+
+home=/home/$user
+if test -s "$dir/ssh-authorized-key"; then
+    install -d -m 0700 -o "$user" -g "$user" "$home/.ssh"
+    install -m 0600 -o "$user" -g "$user" \
+        "$dir/ssh-authorized-key" "$home/.ssh/authorized_keys"
+fi
+
+if test -f "$dir/xkb-layout"; then
+    layout=$(cat "$dir/xkb-layout")
+    case "$layout" in
+        '' | *[!a-zA-Z0-9_+-]*) exit 1 ;;
+    esac
+    source=$(mktemp -d)
+    trap 'rm -rf -- "$source"' EXIT INT TERM
+    install -d -m 0700 "$home/.config/dconf"
+    printf '[org/gnome/desktop/input-sources]\nsources=[('\''xkb'\'', '\''%s'\'')]\n' \
+        "$layout" >"$source/input-sources"
+    dconf compile "$home/.config/dconf/user" "$source"
+    chown -R "$user:" "$home/.config"
+fi
+
+loginctl enable-linger "$user"
+rm -rf -- "$dir"

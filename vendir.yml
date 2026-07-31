@@ -8,6 +8,7 @@ directories:
           url: https://github.com/puffin-os/base
           ref: main
         excludePaths:
+          - .git
           - .git/**/*
   - path: shared
     contents:
@@ -16,6 +17,7 @@ directories:
           url: https://github.com/puffin-os/shared
           ref: main
         excludePaths:
+          - .git
           - .git/**/*
   - path: server
     contents:
@@ -24,6 +26,7 @@ directories:
           url: https://github.com/puffin-os/server
           ref: main
         excludePaths:
+          - .git
           - .git/**/*
   - path: desktop
     contents:
@@ -32,6 +35,7 @@ directories:
           url: https://github.com/puffin-os/desktop
           ref: main
         excludePaths:
+          - .git
           - .git/**/*
   - path: workstation
     contents:
@@ -40,4 +44,5 @@ directories:
           url: https://github.com/puffin-os/workstation
           ref: main
         excludePaths:
+          - .git
           - .git/**/*

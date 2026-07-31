@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+ln -sf ../puffin-etc-setup.service \
+    "$BUILDROOT/usr/lib/systemd/system/initrd-root-fs.target.wants/puffin-etc-setup.service"
