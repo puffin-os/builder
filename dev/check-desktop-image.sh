@@ -92,12 +92,16 @@ for service in \
     puffin-provision.service \
     systemd-resolved.service \
     systemd-sysupdate.timer; do
-    test "$(systemctl --root="$work/root" is-enabled "$service")" = enabled ||
+    test "$(podman run --rm -v "$work:/check:Z" localhost/puffin-builder:26 \
+        systemctl --root=/check/root is-enabled "$service")" = enabled ||
         { echo "service is not enabled: $service" >&2; exit 1; }
 done
-test "$(systemctl --root="$work/root" is-enabled systemd-networkd.service)" = disabled
-test "$(systemctl --root="$work/root" is-enabled systemd-homed.service 2>/dev/null || true)" = disabled
-test "$(systemctl --root="$work/root" is-enabled sshd.service 2>/dev/null || true)" != enabled
+test "$(podman run --rm -v "$work:/check:Z" localhost/puffin-builder:26 \
+    systemctl --root=/check/root is-enabled systemd-networkd.service)" = disabled
+test "$(podman run --rm -v "$work:/check:Z" localhost/puffin-builder:26 \
+    systemctl --root=/check/root is-enabled systemd-homed.service 2>/dev/null || true)" = disabled
+test "$(podman run --rm -v "$work:/check:Z" localhost/puffin-builder:26 \
+    systemctl --root=/check/root is-enabled sshd.service 2>/dev/null || true)" != enabled
 
 grep -q '^dns=systemd-resolved$' \
     "$work/root/usr/lib/NetworkManager/conf.d/10-puffin-dns.conf"

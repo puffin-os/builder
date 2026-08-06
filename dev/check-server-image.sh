@@ -82,10 +82,12 @@ for service in \
     sshd.service \
     systemd-networkd.service \
     systemd-sysupdate.timer; do
-    test "$(systemctl --root="$work/root" is-enabled "$service")" = enabled ||
+    test "$(podman run --rm -v "$work:/check:Z" localhost/puffin-builder:26 \
+        systemctl --root=/check/root is-enabled "$service")" = enabled ||
         { echo "service is not enabled: $service" >&2; exit 1; }
 done
-test "$(systemctl --root="$work/root" is-enabled systemd-homed.service 2>/dev/null || true)" = disabled
+test "$(podman run --rm -v "$work:/check:Z" localhost/puffin-builder:26 \
+    systemctl --root=/check/root is-enabled systemd-homed.service 2>/dev/null || true)" = disabled
 
 test ! -e \
     "$work/root/usr/lib/systemd/system/serial-getty@ttyS0.service.d/autologin.conf"

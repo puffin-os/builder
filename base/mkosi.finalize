@@ -4,10 +4,3 @@ set -eu
 test ! -e "$BUILDROOT/usr/etc"
 mv "$BUILDROOT/etc" "$BUILDROOT/usr/etc"
 install -d "$BUILDROOT/etc"
-
-# Install the update verification public key if the dev profile provided one.
-if test -f /work/.local/update-pubring.gpg; then
-    install -d "$BUILDROOT/usr/lib/systemd"
-    install -m 0644 /work/.local/update-pubring.gpg \
-        "$BUILDROOT/usr/lib/systemd/import-pubring.gpg"
-fi

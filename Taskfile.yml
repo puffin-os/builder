@@ -81,6 +81,10 @@ tasks:
         test -f .local/update-pubring.gpg ||
         podman run --rm -v '{{.ROOT_DIR}}/.local:/keys:Z' -w /keys '{{.BUILDER}}'
         /work/dev/gen-update-key.sh /keys
+      - >-
+        mkdir -p base/mkosi.profiles/dev/mkosi.extra/usr/lib/systemd &&
+        cp .local/update-pubring.gpg
+        base/mkosi.profiles/dev/mkosi.extra/usr/lib/systemd/import-pubring.gpg
 
   summary:
     desc: Show the base image build summary
