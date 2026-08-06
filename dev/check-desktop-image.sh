@@ -3,6 +3,7 @@ set -eu
 
 image=${1:?image path required}
 manifest=${2:?manifest path required}
+expected_image_id=${3:-puffin-desktop}
 project=$(realpath "$(dirname "$0")/..")
 
 "$project/dev/check-image.sh" "$image"
@@ -61,7 +62,7 @@ done
 test -x "$work/root/usr/lib/puffin/provision-user"
 test -x "$work/root/usr/lib/puffin/check-boot-health"
 test -x "$work/root/usr/lib/puffin/check-desktop-health"
-grep -qx 'IMAGE_ID="puffin-desktop"' "$work/root/usr/lib/os-release"
+grep -qx "IMAGE_ID=\"$expected_image_id\"" "$work/root/usr/lib/os-release"
 grep -qx 'IMAGE_VERSION="0.1.0"' "$work/root/usr/lib/os-release"
 test -f "$work/root/usr/lib/systemd/import-pubring.gpg"
 test -d "$work/root/etc"
@@ -124,4 +125,4 @@ while IFS= read -r app; do
 done <"$project/desktop/flatpaks.apps"
 printf '%s\n' "$flatpak_state" | grep -q 'remote "flathub"'
 
-echo "Desktop image checks passed"
+echo "$expected_image_id image checks passed"

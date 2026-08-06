@@ -76,6 +76,7 @@ tasks:
         '{{.ROOT}}/dev/check-desktop-image.sh'
         '{{.ROOT}}/out/puffin-desktop-x86-64.raw'
         '{{.ROOT}}/out/puffin-desktop-x86-64.manifest'
+        puffin-desktop
       - PUFFIN_FLAVOR=desktop '{{.ROOT}}/dev/qemu.sh' --check
 
   reset:
