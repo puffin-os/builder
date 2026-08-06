@@ -8,8 +8,8 @@ directories:
   path: base
 - contents:
   - git:
-      commitTitle: 'feat: handle install-brew and install-mise provision flags...'
-      sha: 1fa1ec7527f66b82cf467588d37f00e56090644a
+      commitTitle: Initial commit
+      sha: f93425068e50d2de3dbef83f90b5c618b30742a9
     path: .
   path: shared
 - contents:
@@ -26,8 +26,8 @@ directories:
   path: desktop
 - contents:
   - git:
-      commitTitle: 'feat: add BoxBuddy flatpak and workstation-specific build...'
-      sha: 1ebb53fed653e872d8ecde86fdfe7d0a585b9309
+      commitTitle: Initial commit
+      sha: 232ac23e26678934b05071da0d893fa56ab93719
     path: .
   path: workstation
 kind: LockConfig
