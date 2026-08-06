@@ -2,12 +2,14 @@ version: '3'
 
 tasks:
   summary:
+    desc: Show the desktop image build summary
     cmds:
       - task: ':keys'
       - mkdir -p '{{.ROOT}}/out' '{{.ROOT}}/.cache/mkosi' '{{.ROOT}}/.cache/packages'
       - '{{.CONTAINER}} -w /work/desktop {{.BUILDER}} mkosi --profile=dev {{.KEYS}} summary'
 
   flatpaks:lock:
+    desc: Regenerate the locked Flatpak application pins
     cmds:
       - task: ':builder'
       - mkdir -p '{{.ROOT}}/out'
@@ -15,6 +17,7 @@ tasks:
 
   flatpaks:build:
     internal: true
+    desc: Build the locked Flatpak seed tarball
     sources:
       - flatpaks.apps
       - flatpaks.lock
@@ -27,6 +30,7 @@ tasks:
       - '{{.CONTAINER}} {{.BUILDER}} /work/dev/flatpak-seed.sh build'
 
   build:
+    desc: Build the desktop image
     cmds:
       - task: ':keys'
       - task: flatpaks:build
@@ -41,6 +45,7 @@ tasks:
 
   ensure-built:
     internal: true
+    desc: Build the desktop image if sources changed
     method: checksum
     sources:
       - flatpaks.apps
@@ -58,11 +63,13 @@ tasks:
       - task: build
 
   run:
+    desc: Boot the desktop image in QEMU
     cmds:
       - task: ensure-built
       - PUFFIN_FLAVOR=desktop PUFFIN_GRAPHICS=1 '{{.ROOT}}/dev/qemu.sh'
 
   check:
+    desc: Validate and boot-check the desktop image
     cmds:
       - task: ensure-built
       - >-
@@ -72,10 +79,12 @@ tasks:
       - PUFFIN_FLAVOR=desktop '{{.ROOT}}/dev/qemu.sh' --check
 
   reset:
+    desc: Remove persistent desktop VM state
     cmds:
       - rm -f -- '{{.ROOT}}/state/puffin-desktop.qcow2' '{{.ROOT}}/state/OVMF_VARS-desktop.fd'
 
   installer:build:
+    desc: Build the desktop bootable installer
     cmds:
       - task: build
       - rm -rf -- '{{.ROOT}}/out/desktop-installer-tree'
@@ -95,6 +104,7 @@ tasks:
 
   installer:ensure-built:
     internal: true
+    desc: Build the desktop installer if sources changed
     method: checksum
     sources:
       - installer/mkosi.conf
@@ -108,15 +118,18 @@ tasks:
       - task: installer:build
 
   installer:run:
+    desc: Boot the desktop installer in QEMU
     cmds:
       - task: installer:ensure-built
       - PUFFIN_FLAVOR=desktop '{{.ROOT}}/dev/qemu-installer.sh'
 
   installer:installed-run:
+    desc: Boot the desktop-installed target in QEMU
     cmds:
       - "PUFFIN_FLAVOR=desktop '{{.ROOT}}/dev/qemu-installer.sh' installed"
 
   installer:check:
+    desc: Validate and boot-check the desktop installer
     cmds:
       - task: installer:ensure-built
       - >-
@@ -126,6 +139,7 @@ tasks:
       - PUFFIN_FLAVOR=desktop-installer '{{.ROOT}}/dev/qemu.sh' --check
 
   installer:reset:
+    desc: Remove persistent desktop installer VM state
     cmds:
       - >-
         rm -f --

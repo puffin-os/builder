@@ -2,12 +2,14 @@ version: '3'
 
 tasks:
   summary:
+    desc: Show the base image build summary
     cmds:
       - task: ':keys'
       - mkdir -p '{{.ROOT}}/out' '{{.ROOT}}/.cache/mkosi' '{{.ROOT}}/.cache/packages'
       - '{{.CONTAINER}} -w /work/base {{.BUILDER}} mkosi --profile=dev {{.KEYS}} summary'
 
   build:
+    desc: Build the base image
     cmds:
       - task: ':keys'
       - mkdir -p '{{.ROOT}}/out' '{{.ROOT}}/.cache/mkosi' '{{.ROOT}}/.cache/packages'
@@ -17,6 +19,7 @@ tasks:
 
   ensure-built:
     internal: true
+    desc: Build the base image if sources changed
     method: checksum
     sources:
       - mkosi.conf
@@ -31,11 +34,13 @@ tasks:
       - task: build
 
   run:
+    desc: Boot the base image in QEMU
     cmds:
       - task: ensure-built
       - '{{.ROOT}}/dev/qemu.sh'
 
   check:
+    desc: Validate and boot-check the base image
     cmds:
       - task: ensure-built
       - '{{.CONTAINER}} -w /work/base {{.BUILDER}} /work/dev/check-image.sh /work/out/puffin-base-x86-64.raw'
@@ -43,5 +48,6 @@ tasks:
       - '{{.ROOT}}/dev/check-ab-update.sh /work/out/puffin-base-x86-64.raw /work/out/puffin-base-x86-64.efi'
 
   reset:
+    desc: Remove persistent base VM state
     cmds:
       - rm -f -- '{{.ROOT}}/state/puffin-base.qcow2' '{{.ROOT}}/state/OVMF_VARS-base.fd'

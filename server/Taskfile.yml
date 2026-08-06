@@ -2,12 +2,14 @@ version: '3'
 
 tasks:
   summary:
+    desc: Show the server image build summary
     cmds:
       - task: ':keys'
       - mkdir -p '{{.ROOT}}/out' '{{.ROOT}}/.cache/mkosi' '{{.ROOT}}/.cache/packages'
       - '{{.CONTAINER}} -w /work/server {{.BUILDER}} mkosi --profile=dev {{.KEYS}} summary'
 
   build:
+    desc: Build the server image
     cmds:
       - task: ':keys'
       - mkdir -p '{{.ROOT}}/out' '{{.ROOT}}/.cache/mkosi' '{{.ROOT}}/.cache/packages'
@@ -17,6 +19,7 @@ tasks:
 
   ensure-built:
     internal: true
+    desc: Build the server image if sources changed
     method: checksum
     sources:
       - mkosi.conf
@@ -31,11 +34,13 @@ tasks:
       - task: build
 
   run:
+    desc: Boot the server image in QEMU
     cmds:
       - task: ensure-built
       - PUFFIN_FLAVOR=server PUFFIN_GRAPHICS=1 '{{.ROOT}}/dev/qemu.sh'
 
   check:
+    desc: Validate and boot-check the server image
     cmds:
       - task: ensure-built
       - >-
@@ -45,10 +50,12 @@ tasks:
       - PUFFIN_FLAVOR=server '{{.ROOT}}/dev/qemu.sh' --check
 
   reset:
+    desc: Remove persistent server VM state
     cmds:
       - rm -f -- '{{.ROOT}}/state/puffin-server.qcow2' '{{.ROOT}}/state/OVMF_VARS-server.fd'
 
   installer:build:
+    desc: Build the server bootable installer
     cmds:
       - task: build
       - rm -rf -- '{{.ROOT}}/out/installer-tree'
@@ -61,6 +68,7 @@ tasks:
 
   installer:ensure-built:
     internal: true
+    desc: Build the server installer if sources changed
     method: checksum
     sources:
       - installer/mkosi.conf
@@ -74,15 +82,18 @@ tasks:
       - task: installer:build
 
   installer:run:
+    desc: Boot the server installer in QEMU
     cmds:
       - task: installer:ensure-built
       - '{{.ROOT}}/dev/qemu-installer.sh'
 
   installer:installed-run:
+    desc: Boot the server-installed target in QEMU
     cmds:
       - "'{{.ROOT}}/dev/qemu-installer.sh' installed"
 
   installer:check:
+    desc: Validate and boot-check the server installer
     cmds:
       - task: installer:ensure-built
       - >-
@@ -92,6 +103,7 @@ tasks:
       - PUFFIN_FLAVOR=server-installer '{{.ROOT}}/dev/qemu.sh' --check
 
   installer:reset:
+    desc: Remove persistent server installer VM state
     cmds:
       - >-
         rm -f --

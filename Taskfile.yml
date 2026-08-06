@@ -42,6 +42,7 @@ includes:
 
 tasks:
   default:
+    desc: List all available tasks
     cmds:
       - task -a
   sync:
