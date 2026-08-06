@@ -11,6 +11,17 @@ gpg_key=${6:?GPG signing key required}
 case "$image_id" in puffin-server|puffin-desktop|puffin-workstation) ;; *) exit 2 ;; esac
 case "$version" in *[!0-9A-Za-z._~-]*|'') exit 2 ;; esac
 
+# Verify the image was built with the requested version.
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT INT TERM
+start=$(sfdisk --json "$image" |
+    awk '/"start":/ { value=$2; gsub(/,/, "", value) }
+         /"name": "puffin_.*_root"/ { print value; exit }')
+test -n "$start"
+fsck.erofs --offset="$((start * 512))" --extract="$work/root" "$image" >/dev/null
+grep -qx "IMAGE_VERSION=\"$version\"" "$work/root/usr/lib/os-release" ||
+    { echo "image IMAGE_VERSION does not match requested version $version" >&2; exit 2; }
+
 mkdir -p "$destination/$image_id/x86-64"
 destination=$destination/$image_id/x86-64
 table=$(sfdisk --json "$image")
@@ -33,5 +44,9 @@ install -m 0644 "$uki" "$destination/puffin-${version}.efi"
     cd "$destination"
     sha256sum "puffin-${version}.root.raw" "puffin-${version}.verity.raw" \
         "puffin-${version}.verity-sig.raw" "puffin-${version}.efi" >SHA256SUMS
-    gpg --batch --yes --local-user "$gpg_key" --detach-sign --output SHA256SUMS.gpg SHA256SUMS
+    export GNUPGHOME=$(mktemp -d)
+    trap 'rm -rf "$GNUPGHOME"' EXIT INT TERM
+    gpg --batch --import "$gpg_key"
+    gpg --batch --yes --local-user 'dev@puffin.invalid' \
+        --detach-sign --output SHA256SUMS.gpg SHA256SUMS
 )

@@ -1,0 +1,102 @@
+version: '3'
+
+tasks:
+  summary:
+    cmds:
+      - task: ':keys'
+      - mkdir -p '{{.ROOT}}/out' '{{.ROOT}}/.cache/mkosi' '{{.ROOT}}/.cache/packages'
+      - '{{.CONTAINER}} -w /work/server {{.BUILDER}} mkosi --profile=dev {{.KEYS}} summary'
+
+  build:
+    cmds:
+      - task: ':keys'
+      - mkdir -p '{{.ROOT}}/out' '{{.ROOT}}/.cache/mkosi' '{{.ROOT}}/.cache/packages'
+      - >-
+        {{.CONTAINER}} -w /work/server {{.BUILDER}} mkosi --profile=dev {{.KEYS}}
+        {{if .IMAGE_VERSION}}--image-version={{.IMAGE_VERSION}}{{end}} -f build
+
+  ensure-built:
+    internal: true
+    method: checksum
+    sources:
+      - mkosi.conf
+      - ../base/mkosi.conf
+      - ../base/mkosi.extra/**
+      - ../base/mkosi.repart/**
+      - ../shared/mkosi.extra/**
+      - mkosi.extra/**
+    generates:
+      - '{{.ROOT}}/out/puffin-server-x86-64.raw'
+    cmds:
+      - task: build
+
+  run:
+    cmds:
+      - task: ensure-built
+      - PUFFIN_FLAVOR=server PUFFIN_GRAPHICS=1 '{{.ROOT}}/dev/qemu.sh'
+
+  check:
+    cmds:
+      - task: ensure-built
+      - >-
+        '{{.ROOT}}/dev/check-server-image.sh'
+        '{{.ROOT}}/out/puffin-server-x86-64.raw'
+        '{{.ROOT}}/out/puffin-server-x86-64.manifest'
+      - PUFFIN_FLAVOR=server '{{.ROOT}}/dev/qemu.sh' --check
+
+  reset:
+    cmds:
+      - rm -f -- '{{.ROOT}}/state/puffin-server.qcow2' '{{.ROOT}}/state/OVMF_VARS-server.fd'
+
+  installer:build:
+    cmds:
+      - task: build
+      - rm -rf -- '{{.ROOT}}/out/installer-tree'
+      - mkdir -p '{{.ROOT}}/out/installer-tree/usr/lib/puffin'
+      - >-
+        {{.CONTAINER}} {{.BUILDER}} zstd -T0 -f
+        /work/out/puffin-server-x86-64.raw
+        -o /work/out/installer-tree/usr/lib/puffin/puffin-server-x86-64.raw.zst
+      - '{{.CONTAINER}} -w /work/server/installer {{.BUILDER}} mkosi --profile=dev {{.KEYS}} -f build'
+
+  installer:ensure-built:
+    internal: true
+    method: checksum
+    sources:
+      - installer/mkosi.conf
+      - installer/mkosi.extra/**
+      - installer/mkosi.images/**
+      - installer/mkosi.profiles/**
+      - installer/mkosi.repart/**
+    generates:
+      - '{{.ROOT}}/out/puffin-server-installer-x86-64.raw'
+    cmds:
+      - task: installer:build
+
+  installer:run:
+    cmds:
+      - task: installer:ensure-built
+      - '{{.ROOT}}/dev/qemu-installer.sh'
+
+  installer:installed-run:
+    cmds:
+      - "'{{.ROOT}}/dev/qemu-installer.sh' installed"
+
+  installer:check:
+    cmds:
+      - task: installer:ensure-built
+      - >-
+        {{.CONTAINER}} -w /work/server/installer {{.BUILDER}}
+        /work/dev/check-installer-image.sh
+        /work/out/puffin-server-installer-x86-64.raw
+      - PUFFIN_FLAVOR=server-installer '{{.ROOT}}/dev/qemu.sh' --check
+
+  installer:reset:
+    cmds:
+      - >-
+        rm -f --
+        '{{.ROOT}}/state/puffin-server-installer.qcow2'
+        '{{.ROOT}}/state/puffin-server-target.qcow2'
+        '{{.ROOT}}/state/OVMF_VARS-installer.fd'
+        '{{.ROOT}}/state/swtpm.sock'
+      - rm -rf -- '{{.ROOT}}/state/tpm'

@@ -1,0 +1,18 @@
+# Builder package lockfile — pinned versions for reproducible builds.
+# Format: name-version-release
+# Update this file and the Fedora base image digest in Containerfile together.
+archlinux-keyring-20260612-1.fc44
+cryptsetup-2.8.7-1.fc44
+dosfstools-4.2-18.fc44
+e2fsprogs-1.47.3-4.fc44
+erofs-utils-1.9.2-2.fc44
+flatpak-1.18.0-1.fc44
+mkosi-26-3.fc44
+openssl-3.5.7-2.fc44
+pacman-7.0.0-6.fc44
+qemu-img-10.2.2-1.fc44
+sbsigntools-0.9.5-14.fc44
+systemd-boot-unsigned-259.8-1.fc44
+systemd-container-259.8-1.fc44
+systemd-ukify-259.8-1.fc44
+util-linux-2.41.5-1.fc44

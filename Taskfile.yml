@@ -55,6 +55,17 @@ tasks:
     cmds:
       - podman build -t '{{.BUILDER}}' -f dev/Containerfile .
 
+  builder:lock:
+    desc: Regenerate the pinned builder package lockfile
+    cmds:
+      - task: builder
+      - >-
+        podman run --rm '{{.BUILDER}}' rpm -q --qf '%{NAME}-%{VERSION}-%{RELEASE}\n'
+        archlinux-keyring cryptsetup dosfstools e2fsprogs erofs-utils flatpak
+        mkosi openssl pacman qemu-img sbsigntools systemd-boot-unsigned
+        systemd-container systemd-ukify util-linux
+        > dev/builder-packages.lock
+
   keys:
     desc: Create disposable development signing keys
     run: once
@@ -65,6 +76,10 @@ tasks:
         test -f .local/mkosi.key -a -f .local/mkosi.crt ||
         podman run --rm -v '{{.ROOT_DIR}}/.local:/keys:Z' -w /keys '{{.BUILDER}}'
         mkosi genkey --genkey-common-name='Puffin development'
+      - >-
+        test -f .local/update-pubring.gpg ||
+        podman run --rm -v '{{.ROOT_DIR}}/.local:/keys:Z' -w /keys '{{.BUILDER}}'
+        /work/dev/gen-update-key.sh /keys
 
   summary:
     desc: Show the base image build summary
@@ -95,6 +110,10 @@ tasks:
     desc: Publish signed update artifacts
     requires:
       vars: [FLAVOR, VERSION, DESTINATION, GPG_KEY]
+    deps:
+      - task: '{{.FLAVOR}}:build'
+        vars:
+          IMAGE_VERSION: '{{.VERSION}}'
     cmds:
       - >-
         dev/publish-update.sh

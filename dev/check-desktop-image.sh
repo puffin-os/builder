@@ -63,6 +63,7 @@ test -x "$work/root/usr/lib/puffin/check-boot-health"
 test -x "$work/root/usr/lib/puffin/check-desktop-health"
 grep -qx 'IMAGE_ID="puffin-desktop"' "$work/root/usr/lib/os-release"
 grep -qx 'IMAGE_VERSION="0.1.0"' "$work/root/usr/lib/os-release"
+test -f "$work/root/usr/lib/systemd/import-pubring.gpg"
 test -d "$work/root/etc"
 test -z "$(find "$work/root/etc" -mindepth 1 -print -quit)"
 podman run --rm -v "$work:/check:Z" localhost/puffin-builder:26 \
