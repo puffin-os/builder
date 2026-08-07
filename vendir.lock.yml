@@ -8,8 +8,8 @@ directories:
   path: base
 - contents:
   - git:
-      commitTitle: Initial commit
-      sha: f93425068e50d2de3dbef83f90b5c618b30742a9
+      commitTitle: 'feat: handle install-brew and install-mise provision flags...'
+      sha: 1fa1ec7527f66b82cf467588d37f00e56090644a
     path: .
   path: shared
 - contents:
@@ -26,8 +26,8 @@ directories:
   path: desktop
 - contents:
   - git:
-      commitTitle: Initial commit
-      sha: 232ac23e26678934b05071da0d893fa56ab93719
+      commitTitle: 'fix: align Taskfile style with other component repos...'
+      sha: a0a6c496f30517fc757ea7e0cffacef8accdedcf
     path: .
   path: workstation
 kind: LockConfig
